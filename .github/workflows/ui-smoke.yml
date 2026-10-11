@@ -11,6 +11,7 @@ on:
 
 permissions:
   contents: read
+  pull-requests: write
 
 concurrency:
   group: ui-smoke-${{ github.ref }}
@@ -69,68 +70,64 @@ jobs:
           set -uo pipefail
           LOG=probe-app.log
           : > "$LOG"
-          note() { echo "$@" >> "$LOG"; }
+          exec >> "$LOG" 2>&1
+          set -x
 
           APP_BIN=$(find release/linux-unpacked -maxdepth 1 -type f -executable -name 'loader' | head -n 1)
           if [ -z "$APP_BIN" ]; then
             APP_BIN=$(find release/linux-unpacked -maxdepth 1 -type f -executable \
               ! -name 'chrome-sandbox' ! -name 'chrome_crashpad_handler' | head -n 1)
           fi
-          if [ -z "$APP_BIN" ]; then
-            note "No packaged application binary found in release/linux-unpacked"
-            exit 1
-          fi
-          note "Packaged binary: $APP_BIN"
+          echo "Packaged binary: $APP_BIN"
+          test -n "$APP_BIN" || exit 1
 
-          note "--- application archive contents ---"
+          echo "--- archive contents ---"
           node -e '
             const asar = require("@electron/asar");
             const files = asar.listPackage("release/linux-unpacked/resources/app.asar");
             const wanted = files.filter((file) => /dist\/index\.html|dist-electron\/electron\/(main|preload)\.js|dist\/assets\//.test(file));
-            console.log(wanted.slice(0, 8).join("\n") || "(no renderer entries found)");
+            console.log(wanted.slice(0, 6).join("\n") || "(no renderer entries found)");
             console.log("total entries:", files.length);
-          ' >> "$LOG" 2>&1 || note "asar inspection failed"
+          ' || echo "asar inspection failed"
 
-          note "--- unpacked native module ---"
-          ls release/linux-unpacked/resources/app.asar.unpacked/node_modules/better-sqlite3 >/dev/null 2>&1 \
-            && find release/linux-unpacked/resources/app.asar.unpacked/node_modules/better-sqlite3 -name '*.node' >> "$LOG" 2>&1 \
-            || note "better-sqlite3 was not unpacked from the archive"
+          echo "--- unpacked native module ---"
+          find release/linux-unpacked/resources/app.asar.unpacked -name '*.node' || echo "nothing unpacked"
+          UNPACKED="$PWD/release/linux-unpacked/resources/app.asar.unpacked/node_modules/better-sqlite3"
+          export UNPACKED
 
-          note "--- launching the packaged application ---"
+          echo "--- preflight: packaged binary reports its version ---"
+          timeout 60 "$APP_BIN" --version
+          echo "preflight exit: $?"
+
+          echo "--- preflight: native module loads in the packaged runtime ---"
+          ELECTRON_RUN_AS_NODE=1 timeout 60 "$APP_BIN" -e 'try { require(process.env.UNPACKED); console.log("better-sqlite3 loaded"); } catch (error) { console.log("better-sqlite3 failed: " + error.message); }'
+          echo "native module check exit: $?"
+
+          echo "--- scenario 1: packaged binary ---"
           xvfb-run -a --server-args="-screen 0 1440x920x24" "$APP_BIN" \
-            --no-sandbox --disable-gpu --remote-debugging-port=9222 >> "$LOG" 2>&1 &
+            --no-sandbox --disable-gpu --remote-debugging-port=9222 &
           APP_PID=$!
-          sleep 6
-          if kill -0 "$APP_PID" 2>/dev/null; then
-            note "The application is still running six seconds after launch."
-          else
-            note "The application exited within six seconds of launch."
-          fi
-          note "--- listening sockets ---"
-          ss -ltn >> "$LOG" 2>&1 || true
-
-          APP_LOG="$HOME/.config/Loader/logs/main.log"
-          note "--- application log ($APP_LOG) ---"
-          if [ -f "$APP_LOG" ]; then
-            tail -n 60 "$APP_LOG" >> "$LOG" 2>&1
-          else
-            note "no application log file"
-          fi
-
-          note "--- native module load check ---"
-          export UNPACKED="$PWD/release/linux-unpacked/resources/app.asar.unpacked/node_modules/better-sqlite3"
-          ELECTRON_RUN_AS_NODE=1 "$APP_BIN" -e '
-            try { require(process.env.UNPACKED); console.log("better-sqlite3 loaded"); }
-            catch (error) { console.log("better-sqlite3 failed: " + error.message); }
-          ' >> "$LOG" 2>&1
-          note "native module check exit status: $?"
-
-          node scripts/ui-smoke/app-probe.cjs | tee -a "$LOG"
-          STATUS=${PIPESTATUS[0]}
+          sleep 8
+          if kill -0 "$APP_PID" 2>/dev/null; then echo "app alive eight seconds after launch"; else echo "app exited within eight seconds"; fi
+          ss -ltn | head -10 || true
+          echo "--- application log ---"
+          tail -n 40 "$HOME/.config/Loader/logs/main.log" 2>/dev/null || echo "no application log"
+          node scripts/ui-smoke/app-probe.cjs
+          echo "scenario 1 probe exit: $?"
           kill "$APP_PID" 2>/dev/null || true
           wait "$APP_PID" 2>/dev/null
-          note "Application exit status: $?"
-          exit "$STATUS"
+          echo "scenario 1 application exit status: $?"
+
+          echo "--- scenario 2: same archive served by the workspace electron ---"
+          xvfb-run -a --server-args="-screen 0 1440x920x24" \
+            npx electron --no-sandbox --disable-gpu --remote-debugging-port=9223 \
+            release/linux-unpacked/resources/app.asar &
+          ASAR_PID=$!
+          sleep 8
+          if kill -0 "$ASAR_PID" 2>/dev/null; then echo "archive app alive eight seconds after launch"; else echo "archive app exited within eight seconds"; fi
+          CDP_PORT=9223 SMOKE_LABEL=archive-via-workspace-electron node scripts/ui-smoke/app-probe.cjs
+          echo "scenario 2 probe exit: $?"
+          kill "$ASAR_PID" 2>/dev/null || true
 
       - name: Report renderer results
         if: always()
@@ -161,6 +158,13 @@ jobs:
               for (const line of selected) console.log(`::warning title=${process.env.FILE}::${escape(line)}`);
             '
           done
+
+      - name: Publish smoke report
+        if: always() && github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SMOKE_PR: ${{ github.event.pull_request.number }}
+        run: node scripts/ui-smoke/publish.cjs
 
       - name: Upload smoke screenshots
         if: always()

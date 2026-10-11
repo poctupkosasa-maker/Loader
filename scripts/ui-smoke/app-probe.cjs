@@ -12,6 +12,7 @@ const WebSocket = require('ws');
 const PORT = Number(process.env.CDP_PORT || 9222);
 const OUT_DIR = process.env.SMOKE_OUT || path.join(process.cwd(), 'smoke-screenshots');
 const WAIT_MS = Number(process.env.SMOKE_WAIT_MS || 5000);
+const LABEL = process.env.SMOKE_LABEL || 'packaged-app';
 
 const DOM_STATE = `(() => {
   const root = document.getElementById('root');
@@ -117,7 +118,7 @@ async function main() {
   const evaluated = await cdp.send('Runtime.evaluate', { expression: DOM_STATE, returnByValue: true, awaitPromise: true });
   const state = evaluated.result?.value ?? { error: evaluated.exceptionDetails?.text || 'no value' };
 
-  const shot = path.join(OUT_DIR, 'packaged-app.png');
+  const shot = path.join(OUT_DIR, `${LABEL}.png`);
   try {
     const capture = await cdp.send('Page.captureScreenshot', { format: 'png' });
     fs.writeFileSync(shot, Buffer.from(capture.data, 'base64'));
@@ -125,8 +126,8 @@ async function main() {
     cdp.logs.push(`screenshot failed: ${error.message}`);
   }
 
-  const report = { scenarios: [{ name: 'packaged-app', url: target.url, state, logs: cdp.logs.slice(0, 20), screenshot: shot }] };
-  fs.writeFileSync(path.join(OUT_DIR, 'app-probe.json'), JSON.stringify(report, null, 2));
+  const report = { scenarios: [{ name: LABEL, url: target.url, state, logs: cdp.logs.slice(0, 20), screenshot: shot }] };
+  fs.writeFileSync(path.join(OUT_DIR, `app-probe-${LABEL}.json`), JSON.stringify(report, null, 2));
   console.log('SMOKE_RESULT ' + JSON.stringify(report));
   cdp.socket.close();
 }
@@ -135,7 +136,7 @@ main().catch((error) => {
   const fatal = String(error && error.stack);
   try {
     fs.mkdirSync(OUT_DIR, { recursive: true });
-    fs.writeFileSync(path.join(OUT_DIR, 'app-probe-fatal.json'), JSON.stringify({ fatal }, null, 2));
+    fs.writeFileSync(path.join(OUT_DIR, `app-probe-${LABEL}-fatal.json`), JSON.stringify({ fatal }, null, 2));
   } catch { /* the workflow still surfaces the stdout report */ }
   console.log('SMOKE_RESULT ' + JSON.stringify({ fatal }));
   process.exit(1);
