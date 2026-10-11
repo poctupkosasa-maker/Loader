@@ -234,9 +234,11 @@ function transformStep(theme, family, value, kind) {
       return hslToHex([rotated, saturation * 0.55, light]);
     }
     // Text flips to dark. The source ramp is dense around the muted values, so
-    // it is remapped onto a monotone span instead of inverted step by step.
+    // it is remapped onto a monotone span. That span stays in the darker half:
+    // the quiet tokens must still read on white panels and on the pale hero.
     const span = (l - INK_MIN) / (INK_MAX - INK_MIN);
-    return hslToHex([rotated, saturation * 0.85, 0.66 - 0.52 * span]);
+    const darkening = theme.inkDarken ?? 0.36;
+    return hslToHex([rotated, saturation * 0.85, 0.45 - darkening * span]);
   }
   return hslToHex([rotated, saturation, l]);
 }
@@ -292,7 +294,9 @@ function artFamily(theme) {
     const rotated = h + (target - ART_BASE_HUE[family]);
     const saturation = Math.min(1, sat * (theme.artSat ?? 1.05));
     if (theme.mode === 'light') {
-      const lift = family === 'terrain' ? 0.42 : family === 'sun' ? 0.3 : 0.25;
+      // The hero banner needs to stay pale in daylight: the dark accents and
+      // quiet labels below it are designed for light surfaces.
+      const lift = token.startsWith('--art-hero') ? 0.66 : family === 'terrain' ? 0.42 : family === 'sun' ? 0.3 : 0.25;
       out[token] = hslToHex([rotated, saturation, l + (1 - l) * lift]);
     } else {
       out[token] = hslToHex([rotated, saturation, l]);

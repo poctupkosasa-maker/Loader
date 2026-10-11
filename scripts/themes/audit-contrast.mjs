@@ -68,6 +68,13 @@ const PAIRS = [
   ['--violet-ink', '--tone-04-violet', 3.2, 'violet chip'],
   ['--info-ink', '--tone-01-info', 3.2, 'info chip'],
   ['--amber-ink', '--amber-surface', 3.0, 'amber chip'],
+  // Hero banner: the illustration sits behind these lines.
+  ['--accent-ink-1', '--art-hero-b', 4.2, 'hero headline'],
+  ['--accent', '--art-hero-b', 2.2, 'hero accent word'],
+  ['--ink-17', '--art-hero-b', 2.4, 'hero description'],
+  ['--ink-20', '--art-hero-b', 2.4, 'hero secondary link'],
+  ['--ink-08', '--art-hero-b', 1.5, 'hero footnote'],
+  ['--ink-06', '--art-hero-b', 1.4, 'hero corner label'],
 ];
 
 const problems = [];
