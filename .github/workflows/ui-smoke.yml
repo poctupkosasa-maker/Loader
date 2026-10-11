@@ -67,38 +67,69 @@ jobs:
         continue-on-error: true
         run: |
           set -uo pipefail
+          LOG=probe-app.log
+          : > "$LOG"
+          note() { echo "$@" >> "$LOG"; }
+
           APP_BIN=$(find release/linux-unpacked -maxdepth 1 -type f -executable -name 'loader' | head -n 1)
           if [ -z "$APP_BIN" ]; then
             APP_BIN=$(find release/linux-unpacked -maxdepth 1 -type f -executable \
               ! -name 'chrome-sandbox' ! -name 'chrome_crashpad_handler' | head -n 1)
           fi
           if [ -z "$APP_BIN" ]; then
-            echo "No packaged application binary found" | tee probe-app.log
+            note "No packaged application binary found in release/linux-unpacked"
             exit 1
           fi
-          echo "Launching $APP_BIN"
+          note "Packaged binary: $APP_BIN"
+
+          note "--- application archive contents ---"
+          node -e '
+            const asar = require("@electron/asar");
+            const files = asar.listPackage("release/linux-unpacked/resources/app.asar");
+            const wanted = files.filter((file) => /dist\/index\.html|dist-electron\/electron\/(main|preload)\.js|dist\/assets\//.test(file));
+            console.log(wanted.slice(0, 8).join("\n") || "(no renderer entries found)");
+            console.log("total entries:", files.length);
+          ' >> "$LOG" 2>&1 || note "asar inspection failed"
+
+          note "--- unpacked native module ---"
+          ls release/linux-unpacked/resources/app.asar.unpacked/node_modules/better-sqlite3 >/dev/null 2>&1 \
+            && find release/linux-unpacked/resources/app.asar.unpacked/node_modules/better-sqlite3 -name '*.node' >> "$LOG" 2>&1 \
+            || note "better-sqlite3 was not unpacked from the archive"
+
+          note "--- launching the packaged application ---"
           xvfb-run -a --server-args="-screen 0 1440x920x24" "$APP_BIN" \
-            --no-sandbox --disable-gpu --remote-debugging-port=9222 > probe-app.log 2>&1 &
+            --no-sandbox --disable-gpu --remote-debugging-port=9222 >> "$LOG" 2>&1 &
           APP_PID=$!
-          sleep 4
+          sleep 6
           if kill -0 "$APP_PID" 2>/dev/null; then
-            echo "The application is still running four seconds after launch."
+            note "The application is still running six seconds after launch."
           else
-            echo "The application exited within four seconds of launch."
+            note "The application exited within six seconds of launch."
           fi
-          ss -ltnp 2>/dev/null | grep -E '9222|LISTEN' | head -5 || true
+          note "--- listening sockets ---"
+          ss -ltn >> "$LOG" 2>&1 || true
+
           APP_LOG="$HOME/.config/Loader/logs/main.log"
+          note "--- application log ($APP_LOG) ---"
           if [ -f "$APP_LOG" ]; then
-            echo "--- electron-log: $APP_LOG ---"
-            tail -n 40 "$APP_LOG"
+            tail -n 60 "$APP_LOG" >> "$LOG" 2>&1
           else
-            echo "--- no electron-log file at $APP_LOG ---"
+            note "no application log file"
           fi
-          node scripts/ui-smoke/app-probe.cjs 2>&1 | tee -a probe-app.log
+
+          note "--- native module load check ---"
+          export UNPACKED="$PWD/release/linux-unpacked/resources/app.asar.unpacked/node_modules/better-sqlite3"
+          ELECTRON_RUN_AS_NODE=1 "$APP_BIN" -e '
+            try { require(process.env.UNPACKED); console.log("better-sqlite3 loaded"); }
+            catch (error) { console.log("better-sqlite3 failed: " + error.message); }
+          ' >> "$LOG" 2>&1
+          note "native module check exit status: $?"
+
+          node scripts/ui-smoke/app-probe.cjs | tee -a "$LOG"
           STATUS=${PIPESTATUS[0]}
           kill "$APP_PID" 2>/dev/null || true
           wait "$APP_PID" 2>/dev/null
-          echo "Application exit status: $?"
+          note "Application exit status: $?"
           exit "$STATUS"
 
       - name: Report renderer results
@@ -119,13 +150,15 @@ jobs:
         if: always()
         run: |
           set -uo pipefail
-          for file in probe-renderer.log probe-app.log; do
+          for file in probe-app.log probe-renderer.log; do
             [ -f "$file" ] || continue
             FILE="$file" node -e '
               const fs = require("node:fs");
               const escape = (value) => String(value).replace(/%/g, "%25").replace(/\r/g, "%0D").replace(/\n/g, "%0A").slice(0, 900);
-              const lines = fs.readFileSync(process.env.FILE, "utf8").split("\n").filter((line) => line.trim()).slice(-12);
-              for (const line of lines) console.log(`::warning title=${process.env.FILE}::${escape(line)}`);
+              const noise = /dbus|NameHasOwner|DevTools listening|libva|MESA|ContextResult/i;
+              const lines = fs.readFileSync(process.env.FILE, "utf8").split("\n").filter((line) => line.trim() && !noise.test(line));
+              const selected = process.env.FILE === "probe-app.log" ? lines.slice(-24) : lines.slice(-8);
+              for (const line of selected) console.log(`::warning title=${process.env.FILE}::${escape(line)}`);
             '
           done
 
