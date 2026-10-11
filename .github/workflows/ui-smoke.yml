@@ -39,43 +39,29 @@ jobs:
       - name: Build renderer and main process
         run: npm run build
 
-      - name: Rebuild the pre-fix asset layout for comparison
-        run: npx vite build --base=/ --outDir dist-abs --emptyOutDir
-
       - name: Install X virtual framebuffer and probe dependencies
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq xvfb
           npm install --no-save --ignore-scripts ws
 
-      - name: Probe the renderer bundle over file://
-        continue-on-error: true
-        run: |
-          set -euo pipefail
-          export SMOKE_SCENARIOS="$(printf '[{"name":"old-absolute-file","url":"file://%s/dist-abs/index.html"},{"name":"fixed-relative-file","url":"file://%s/dist/index.html"}]' "$PWD" "$PWD")"
-          xvfb-run -a --server-args="-screen 0 1440x920x24" \
-            npx electron --no-sandbox --disable-gpu --disable-dev-shm-usage scripts/ui-smoke/renderer-probe.cjs 2>&1 | tee probe-renderer.log
-
       - name: Package the application
         shell: bash
         run: |
           set -euo pipefail
           npx electron-builder --linux --dir --x64 --publish never 2>&1 | tail -20
-          echo "--- packaged output ---"
-          ls -la release/linux-unpacked | head -20
 
-      - name: Probe the packaged application
+      - name: Launch the packaged application and inspect the window
         continue-on-error: true
         run: |
+          # GitHub runs steps with `bash -e`; the diagnostics below are expected
+          # to survive failing preflight checks, so errexit is disabled here.
           set +e
           set -uo pipefail
           LOG=probe-app.log
           : > "$LOG"
           exec >> "$LOG" 2>&1
           set -x
-
-          echo "--- packaged output ---"
-          ls -la release/linux-unpacked | head -30
 
           APP_BIN=$(find release/linux-unpacked -maxdepth 1 -type f -executable -iname 'loader*' | head -n 1)
           if [ -z "$APP_BIN" ]; then
@@ -102,42 +88,33 @@ jobs:
 
           echo "--- unpacked native module ---"
           find release/linux-unpacked/resources/app.asar.unpacked -name '*.node' || echo "nothing unpacked"
-          UNPACKED="$PWD/release/linux-unpacked/resources/app.asar.unpacked/node_modules/better-sqlite3"
-          export UNPACKED
 
-          echo "--- preflight: packaged binary reports its version ---"
+          echo "--- packaged binary reports its version ---"
           timeout 60 "$APP_BIN" --no-sandbox --version
-          echo "preflight exit: $?"
+          echo "version check exit: $?"
 
-          echo "--- preflight: native module loads in the packaged runtime ---"
-          ELECTRON_RUN_AS_NODE=1 timeout 60 "$APP_BIN" -e 'try { require(process.env.UNPACKED); console.log("better-sqlite3 loaded"); } catch (error) { console.log("better-sqlite3 failed: " + error.message); }'
-          echo "native module check exit: $?"
-
-          echo "--- scenario 1: packaged binary ---"
+          # The SUID sandbox helper is not usable on CI runners, so Electron is
+          # started with --no-sandbox; that is a property of the runner, not of
+          # the build.
+          echo "--- launching the packaged application ---"
           xvfb-run -a --server-args="-screen 0 1440x920x24" "$APP_BIN" \
             --no-sandbox --disable-gpu --disable-dev-shm-usage --remote-debugging-port=9222 &
           APP_PID=$!
           sleep 8
-          if kill -0 "$APP_PID" 2>/dev/null; then echo "app alive eight seconds after launch"; else echo "app exited within eight seconds"; fi
+          if kill -0 "$APP_PID" 2>/dev/null; then
+            echo "the application is alive eight seconds after launch"
+          else
+            echo "the application exited within eight seconds"
+          fi
           ss -ltn | head -10 || true
           echo "--- application log ---"
           tail -n 40 "$HOME/.config/Loader/logs/main.log" 2>/dev/null || echo "no application log"
+
           node scripts/ui-smoke/app-probe.cjs
-          echo "scenario 1 probe exit: $?"
+          echo "probe exit: $?"
           kill "$APP_PID" 2>/dev/null || true
           wait "$APP_PID" 2>/dev/null
-          echo "scenario 1 application exit status: $?"
-
-          echo "--- scenario 2: same archive served by the workspace electron ---"
-          xvfb-run -a --server-args="-screen 0 1440x920x24" \
-            npx electron --no-sandbox --disable-gpu --disable-dev-shm-usage --remote-debugging-port=9223 \
-            release/linux-unpacked/resources/app.asar &
-          ASAR_PID=$!
-          sleep 8
-          if kill -0 "$ASAR_PID" 2>/dev/null; then echo "archive app alive eight seconds after launch"; else echo "archive app exited within eight seconds"; fi
-          CDP_PORT=9223 SMOKE_LABEL=archive-via-workspace-electron node scripts/ui-smoke/app-probe.cjs
-          echo "scenario 2 probe exit: $?"
-          kill "$ASAR_PID" 2>/dev/null || true
+          echo "application exit status: $?"
 
       - name: Report renderer results
         if: always()
@@ -157,17 +134,13 @@ jobs:
         if: always()
         run: |
           set -uo pipefail
-          for file in probe-app.log probe-renderer.log; do
-            [ -f "$file" ] || continue
-            FILE="$file" node -e '
-              const fs = require("node:fs");
-              const escape = (value) => String(value).replace(/%/g, "%25").replace(/\r/g, "%0D").replace(/\n/g, "%0A").slice(0, 900);
-              const noise = /dbus|NameHasOwner|DevTools listening|libva|MESA|ContextResult/i;
-              const lines = fs.readFileSync(process.env.FILE, "utf8").split("\n").filter((line) => line.trim() && !noise.test(line));
-              const selected = process.env.FILE === "probe-app.log" ? lines.slice(-24) : lines.slice(-8);
-              for (const line of selected) console.log(`::warning title=${process.env.FILE}::${escape(line)}`);
-            '
-          done
+          FILE=probe-app.log node -e '
+            const fs = require("node:fs");
+            const escape = (value) => String(value).replace(/%/g, "%25").replace(/\r/g, "%0D").replace(/\n/g, "%0A").slice(0, 900);
+            const noise = /dbus|NameHasOwner|DevTools listening|libva|MESA|ContextResult/i;
+            const lines = fs.readFileSync(process.env.FILE, "utf8").split("\n").filter((line) => line.trim() && !noise.test(line));
+            for (const line of lines.slice(-20)) console.log(`::warning title=${process.env.FILE}::${escape(line)}`);
+          '
 
       - name: Publish smoke report
         if: always() && github.event_name == 'pull_request'
@@ -185,6 +158,5 @@ jobs:
             smoke-screenshots/*.png
             smoke-report.json
             probe-app.log
-            probe-renderer.log
           if-no-files-found: warn
           retention-days: 7

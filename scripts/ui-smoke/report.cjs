@@ -29,12 +29,23 @@ for (const entry of fatal) {
   console.log(`::error title=Smoke probe crashed::${escape(entry)}`);
 }
 
+let failed = false;
 for (const scenario of scenarios) {
   const state = scenario.state || {};
   const rendered = typeof state.rootChildren === 'number' && state.rootChildren > 0;
   const logs = (scenario.logs || []).slice(0, 3).join(' | ') || 'no console errors';
-  const summary = `rendered=${rendered} rootChildren=${state.rootChildren} stylesheets=${state.styleSheets} background=${state.background} | logs: ${logs}`;
-  console.log(`::${rendered ? 'notice' : 'warning'} title=Smoke ${scenario.name}::${escape(summary)}`);
+  const summary = `rendered=${rendered} rootChildren=${state.rootChildren} stylesheets=${state.styleSheets} background=${state.background} location=${state.location} | logs: ${logs}`;
+  console.log(`::${rendered ? 'notice' : 'error'} title=Smoke ${scenario.name}::${escape(summary)}`);
+  if (scenario.name === 'packaged-app' && !rendered) failed = true;
+}
+
+if (!scenarios.some((scenario) => scenario.name === 'packaged-app')) {
+  console.log('::error title=Smoke packaged-app::the packaged application was never inspected');
+  failed = true;
 }
 
 console.log(JSON.stringify(report));
+if (failed) {
+  console.log('::error title=Smoke result::the packaged application did not render its interface');
+  process.exit(1);
+}

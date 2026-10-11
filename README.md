@@ -56,6 +56,12 @@ npm run dist:linux
 
 A GitHub Actions workflow (`.github/workflows/build.yml`) builds all three platform targets on pushes to `main` and on pull requests to `main`. Installer files are published as downloadable workflow artifacts for 14 days.
 
+## Packaged renderer notes
+
+`vite.config.mts` sets `base: './'` so the bundled HTML references its assets relatively, and the packaged application serves `dist/` from a privileged `app://` scheme instead of `file://` (Electron's security guide recommends avoiding `file://`). Both matter: an absolute `/assets/...` URL resolves against the filesystem root when the page is opened through `file://`, which leaves the window empty.
+
+A second workflow (`.github/workflows/ui-smoke.yml`) packages the application on Linux, launches it under Xvfb and inspects the window through the DevTools protocol. It fails when the renderer does not mount and uploads a screenshot of the window, so a blank-window regression cannot ship unnoticed.
+
 ## Project map
 
 ```text

@@ -39,24 +39,6 @@ async function request(method, url, body) {
   return response.status === 204 ? null : response.json().catch(() => null);
 }
 
-async function stepOutcomes() {
-  const runId = process.env.GITHUB_RUN_ID;
-  if (!runId) return '';
-  try {
-    const jobs = await request('GET', `${API}/repos/${REPOSITORY}/actions/runs/${runId}/jobs`);
-    const lines = [];
-    for (const job of jobs?.jobs || []) {
-      lines.push(`**${job.name}**`);
-      for (const step of job.steps || []) {
-        lines.push(`- ${step.name} — ${step.conclusion === 'success' ? 'ok' : `**${step.conclusion}**`}`);
-      }
-    }
-    return `\n<details><summary>Step outcomes</summary>\n\n${lines.join('\n')}\n</details>\n`;
-  } catch (error) {
-    return `\n(could not read step outcomes: ${error.message})\n`;
-  }
-}
-
 async function main() {
   const report = JSON.parse(fs.readFileSync('smoke-report.json', 'utf8'));
   const rows = report.scenarios.map((scenario) => {
@@ -75,7 +57,6 @@ async function main() {
     '| scenario | result | #root children | console |',
     '| --- | --- | --- | --- |',
     ...(rows.length ? rows : ['| — | no scenarios recorded | — | — |']),
-    await stepOutcomes(),
     report.fatal?.length ? `\n**Probe failures**\n\n\`\`\`text\n${report.fatal.join('\n').slice(0, 1500)}\n\`\`\`\n` : '',
     readWhenPresent('probe-app.log', 120),
     readWhenPresent('probe-renderer.log', 40),
