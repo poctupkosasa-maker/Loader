@@ -66,7 +66,9 @@ jobs:
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
           if [[ "$status" -ne 0 ]]; then
-            tail -n 15 build-output.log | while IFS= read -r line; do
+            diagnostics=$(grep -iE 'error|failed|failure|unable|could not|not found|required|exception' build-output.log | tail -n 12)
+            if [[ -z "$diagnostics" ]]; then diagnostics=$(tail -n 15 build-output.log); fi
+            printf '%s\n' "$diagnostics" | while IFS= read -r line; do
               line=${line//'%'/'%25'}
               line=${line//$'\r'/'%0D'}
               line=${line//$'\n'/'%0A'}
