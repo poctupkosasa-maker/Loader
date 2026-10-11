@@ -1,0 +1,86 @@
+{
+  "name": "loader-minecraft-launcher",
+  "version": "1.0.0",
+  "description": "A secure, cross-platform Minecraft launcher built with Electron, React, TypeScript, and SQLite.",
+  "author": "Loader Contributors",
+  "license": "MIT",
+  "main": "dist-electron/electron/main.js",
+  "scripts": {
+    "dev": "npm run build:main && concurrently -k \"vite --host 0.0.0.0\" \"tsc -p tsconfig.electron.json --watch\" \"wait-on tcp:5173 dist-electron/electron/main.js && electron .\"",
+    "dev:ui": "vite --host 0.0.0.0",
+    "build:main": "tsc -p tsconfig.electron.json",
+    "build:renderer": "vite build",
+    "build": "npm run build:main && npm run build:renderer",
+    "typecheck": "tsc --noEmit && tsc -p tsconfig.electron.json --noEmit",
+    "postinstall": "electron-rebuild -f -w better-sqlite3",
+    "start": "electron .",
+    "dist": "npm run build && electron-builder",
+    "dist:win": "npm run build && electron-builder --win",
+    "dist:mac": "npm run build && electron-builder --mac",
+    "dist:linux": "npm run build && electron-builder --linux"
+  },
+  "dependencies": {
+    "better-sqlite3": "^13.0.3",
+    "dotenv": "^16.6.1",
+    "electron-log": "^5.4.4",
+    "lucide-react": "^0.577.0",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "skinview3d": "^3.4.2",
+    "yauzl": "^3.2.0"
+  },
+  "devDependencies": {
+    "@electron/rebuild": "^4.2.1",
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/node": "^22.15.30",
+    "@types/react": "^19.0.12",
+    "@types/react-dom": "^19.0.4",
+    "@types/yauzl": "^3.4.0",
+    "concurrently": "^10.0.6",
+    "electron-builder": "^26.15.3",
+    "typescript": "^5.8.3",
+    "vite": "^8.3.4",
+    "wait-on": "^8.0.3",
+    "electron": "^44.7.0"
+  },
+  "build": {
+    "appId": "com.loader.minecraftlauncher",
+    "productName": "Loader",
+    "asar": true,
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "dist-electron/**/*",
+      "package.json"
+    ],
+    "asarUnpack": [
+      "node_modules/better-sqlite3/**/*"
+    ],
+    "mac": {
+      "category": "public.app-category.games",
+      "target": [
+        "dmg",
+        "zip"
+      ]
+    },
+    "win": {
+      "target": [
+        "nsis",
+        "portable"
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    },
+    "linux": {
+      "category": "Game",
+      "target": [
+        "AppImage",
+        "deb"
+      ]
+    }
+  }
+}
