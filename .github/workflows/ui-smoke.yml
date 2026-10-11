@@ -1,0 +1,95 @@
+name: Smoke test packaged UI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ui-smoke-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  smoke:
+    name: Renderer smoke test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build renderer and main process
+        run: npm run build
+
+      - name: Rebuild the pre-fix asset layout for comparison
+        run: npx vite build --base=/ --outDir dist-abs --emptyOutDir
+
+      - name: Install X virtual framebuffer and probe dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq xvfb
+          npm install --no-save --ignore-scripts ws
+
+      - name: Probe the renderer bundle over file://
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          export SMOKE_OUT="$PWD/smoke-screenshots"
+          export SMOKE_SCENARIOS="$(printf '[{"name":"old-absolute-file","url":"file://%s/dist-abs/index.html"},{"name":"fixed-relative-file","url":"file://%s/dist/index.html"}]' "$PWD" "$PWD")"
+          xvfb-run -a --server-args="-screen 0 1440x920x24" npx electron --no-sandbox --disable-gpu scripts/ui-smoke/renderer-probe.cjs
+
+      - name: Package the application
+        shell: bash
+        run: |
+          set -o pipefail
+          npx electron-builder --linux --dir --x64 --publish never 2>&1 | tail -20
+
+      - name: Probe the packaged application
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          export SMOKE_OUT="$PWD/smoke-screenshots"
+          APP_BIN=$(find release/linux-unpacked -maxdepth 1 -type f -executable | head -n 1)
+          echo "Launching $APP_BIN"
+          xvfb-run -a --server-args="-screen 0 1440x920x24" "$APP_BIN" --no-sandbox --disable-gpu --remote-debugging-port=9222 &
+          node scripts/ui-smoke/app-probe.cjs
+
+      - name: Report renderer results
+        if: always()
+        run: |
+          set -euo pipefail
+          export SMOKE_OUT="$PWD/smoke-screenshots"
+          node scripts/ui-smoke/report.cjs | tail -n 1 > probe-output.json
+          {
+            echo '### Renderer smoke test'
+            echo
+            echo '```json'
+            cat probe-output.json
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload smoke screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-smoke
+          path: |
+            smoke-screenshots/*.png
+            smoke-report.json
+          if-no-files-found: warn
+          retention-days: 7

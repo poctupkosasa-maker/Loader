@@ -1,7 +1,7 @@
 import 'dotenv/config';
-import { app, BrowserWindow } from 'electron';
+import { app, BrowserWindow, net, protocol } from 'electron';
 import log from 'electron-log/main';
-import { join } from 'node:path';
+import { isAbsolute, join, relative } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import type { ConsoleLine, DownloadProgress } from '../shared/types';
 import { registerIpc } from './ipc';
@@ -16,8 +16,46 @@ import { ProfileService } from './services/ProfileService';
 import { SecureStore } from './services/SecureStore';
 import { VersionService } from './services/VersionService';
 
+/**
+ * The packaged renderer is served from a privileged custom scheme instead of
+ * file://. A file:// page has an opaque origin: the page CSP cannot match
+ * 'self', storage APIs stay unavailable, and Chromium applies stricter rules to
+ * module scripts there than to a real origin. Serving the bundle from a
+ * privileged scheme keeps production behaviour aligned with the dev server and
+ * follows Electron's security guide (recommendation 18).
+ */
+const RENDERER_SCHEME = 'app';
+const RENDERER_HOST = 'loader';
+const RENDERER_URL = `${RENDERER_SCHEME}://${RENDERER_HOST}/index.html`;
+const RENDERER_ROOT = join(__dirname, '../../dist');
+
+protocol.registerSchemesAsPrivileged([
+  {
+    scheme: RENDERER_SCHEME,
+    privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true, stream: true },
+  },
+]);
+
 let mainWindow: BrowserWindow | null = null;
 let database: DatabaseService | null = null;
+
+function registerRendererProtocol(): void {
+  protocol.handle(RENDERER_SCHEME, async (request) => {
+    try {
+      const { pathname } = new URL(request.url);
+      const decoded = decodeURIComponent(pathname === '/' ? '/index.html' : pathname);
+      const candidate = join(RENDERER_ROOT, decoded);
+      const traversal = relative(RENDERER_ROOT, candidate);
+      if (traversal.startsWith('..') || isAbsolute(traversal)) {
+        return new Response('Forbidden', { status: 403 });
+      }
+      return await net.fetch(pathToFileURL(candidate).toString());
+    } catch (error) {
+      log.warn('Renderer asset request failed:', request.url, error);
+      return new Response('Not found', { status: 404 });
+    }
+  });
+}
 
 function sendToRenderer<T>(channel: string, payload: T): void {
   if (!mainWindow || mainWindow.isDestroyed()) return;
@@ -53,10 +91,12 @@ function createWindow(): void {
     },
   });
 
-  const startUrl = app.isPackaged ? pathToFileURL(join(__dirname, '../../dist/index.html')).href : 'http://localhost:5173';
+  const startUrl = app.isPackaged ? RENDERER_URL : 'http://localhost:5173';
   mainWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   mainWindow.webContents.on('will-navigate', (event, url) => {
-    const permitted = app.isPackaged ? url.startsWith('file://') : url.startsWith('http://localhost:5173');
+    const permitted = app.isPackaged
+      ? url.startsWith(`${RENDERER_SCHEME}://${RENDERER_HOST}/`)
+      : url.startsWith('http://localhost:5173');
     if (!permitted) event.preventDefault();
   });
   void mainWindow.loadURL(startUrl).catch((error: unknown) => {
@@ -98,6 +138,7 @@ async function initialize(): Promise<void> {
     launch,
     getMainWindow: () => mainWindow,
   });
+  if (app.isPackaged) registerRendererProtocol();
   createWindow();
 }
 
