@@ -20,6 +20,11 @@ export interface LauncherProfile {
   active: boolean;
 }
 
+export const THEME_IDS = [
+  'loader', 'nether', 'end', 'ocean', 'bastion', 'cherry', 'sculk', 'redstone', 'daylight',
+] as const;
+export type ThemeId = (typeof THEME_IDS)[number];
+
 export interface AppSettings {
   minRam: number;
   maxRam: number;
@@ -27,6 +32,7 @@ export interface AppSettings {
   javaArgs: string;
   language: LanguageCode;
   gameDir: string;
+  theme: ThemeId;
   curseForgeApiKeyConfigured: boolean;
 }
 

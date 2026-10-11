@@ -1,8 +1,10 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ArrowUpRight, Bell, ChevronDown, CircleCheck, Download, Gamepad2, LoaderCircle } from 'lucide-react';
-import type { AuthEvent, BootstrapData, ConsoleLine, DownloadProgress, LauncherProfile, LoaderKind } from '../shared/types';
+import type { AppSettings, AuthEvent, BootstrapData, ConsoleLine, DownloadProgress, LauncherProfile, LoaderKind, ThemeId } from '../shared/types';
 import { AuthModal } from './components/AuthModal';
 import { Sidebar, type PageId } from './components/Sidebar';
+import { ThemeSwitcher } from './components/ThemePicker';
+import { THEMES } from './themeCatalogue';
 import { ConsolePage } from './pages/ConsolePage';
 import { HomePage } from './pages/HomePage';
 import { ModsPage } from './pages/ModsPage';
@@ -16,6 +18,7 @@ const pageTitle: Record<PageId, string> = { home: 'Home', versions: 'Version lib
 
 export default function App() {
   const [bootstrap, setBootstrap] = useState<BootstrapData | null>(null);
+  const bootstrapRef = useRef<BootstrapData | null>(null);
   const [page, setPage] = useState<PageId>('home');
   const [progress, setProgress] = useState<DownloadProgress[]>([]);
   const [logs, setLogs] = useState<ConsoleLine[]>([]);
@@ -25,6 +28,14 @@ export default function App() {
   const [toast, setToast] = useState<ToastState | null>(null);
   const [modCount, setModCount] = useState(0);
   const language = bootstrap?.settings.language ?? 'en';
+  const theme = bootstrap?.settings.theme ?? 'loader';
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+    const meta = document.querySelector('meta[name="theme-color"]');
+    const swatch = THEMES.find((item) => item.id === theme)?.swatch[0];
+    if (meta && swatch) meta.setAttribute('content', swatch);
+  }, [theme]);
 
   const notify = useCallback((message: string, kind: ToastState['kind'] = 'success') => {
     setToast({ message, kind });
@@ -34,9 +45,18 @@ export default function App() {
     const value = await api.getBootstrap();
     setBootstrap(value);
   }, []);
+  // Themes apply instantly and are persisted on their own, so the picker never
+  // races with unsaved edits on the settings page.
+  const applyTheme = useCallback((next: ThemeId) => {
+    setBootstrap((current) => current ? { ...current, settings: { ...current.settings, theme: next } } : current);
+    void api.saveSettings({ ...(bootstrapRef.current?.settings ?? {}), theme: next } as AppSettings)
+      .catch(() => notify('The theme could not be saved.', 'error'));
+  }, [notify]);
   const openAuthModal = useCallback(() => { setAuthEvent(null); setAuthModal(true); }, []);
   const closeAuthModal = useCallback(() => setAuthModal(false), []);
   const authChanged = useCallback(() => { void reloadBootstrap(); }, [reloadBootstrap]);
+
+  bootstrapRef.current = bootstrap;
 
   useEffect(() => {
     void reloadBootstrap().catch((error) => notify(error instanceof Error ? error.message : 'Could not initialize Loader.', 'error'));
@@ -126,6 +146,7 @@ export default function App() {
         <header className="topbar">
           <div className="breadcrumb"><span>LOADER</span><span className="breadcrumb-slash">/</span><strong>{pageTitle[page]}</strong>{!isDesktop && <span className="preview-badge">PREVIEW MODE</span>}</div>
           <div className="topbar-actions">
+            <ThemeSwitcher theme={theme} language={language} onSelect={applyTheme} />
             <button className="status-pill" onClick={() => setPage('console')}><span className="status-pulse" />{activeProgress.length ? `${activeProgress.length} ${t(language, 'downloads').toLowerCase()}` : 'All systems go'}<ChevronDown size={13} /></button>
             <button className="topbar-account" onClick={openAuthModal}>
               <div className={`topbar-avatar ${bootstrap.account?.kind === 'microsoft' ? 'avatar-online' : ''}`}>{bootstrap.account?.username.slice(0, 1).toUpperCase() ?? <Gamepad2 size={14} />}</div>
@@ -152,7 +173,7 @@ export default function App() {
           />}
           {page === 'versions' && <VersionsPage key={activeProfile.id} profile={activeProfile} installedVersions={bootstrap.installedVersions} progress={progress} language={language} onRefresh={refreshInstalled} onNotify={notify} />}
           {page === 'mods' && <ModsPage key={activeProfile.id} profile={activeProfile} language={language} curseForgeConfigured={bootstrap.settings.curseForgeApiKeyConfigured} onNotify={notify} />}
-          {page === 'settings' && <SettingsPage key={activeProfile.id} profile={activeProfile} profiles={profiles} settings={bootstrap.settings} language={language} onRefresh={refreshInstalled} onNotify={notify} />}
+          {page === 'settings' && <SettingsPage key={activeProfile.id} profile={activeProfile} profiles={profiles} settings={bootstrap.settings} language={language} onRefresh={refreshInstalled} onNotify={notify} onThemeChange={applyTheme} />}
           {page === 'console' && <ConsolePage logs={logs} progress={progress} running={launchState.running} language={language} onClear={() => setLogs([])} />}
         </div>
         <footer className="bottom-bar"><div><span className="bottom-live-dot" />{launchState.running ? launchState.message : t(language, 'ready')}</div><div><span>{activeProfile.name}</span><span className="bottom-separator">·</span><span>{activeProfile.versionId === 'latest-release' ? t(language, 'latestRelease') : activeProfile.versionId}</span><button onClick={() => setPage('settings')}>Manage <ArrowUpRight size={11} /></button></div></footer>

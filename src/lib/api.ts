@@ -16,7 +16,7 @@ function createPreviewAPI(): LauncherAPI {
   let activeProfile = profile;
   let profiles = [profile];
   let account: Account | null = { username: 'Alex', uuid: '8667ba71-b85a-4004-af54-457a9734eed7', kind: 'offline' };
-  let settings: AppSettings = { minRam: 2, maxRam: 6, javaPath: '', javaArgs: '', language: 'en', gameDir: profile.gameDir, curseForgeApiKeyConfigured: false };
+  let settings: AppSettings = { minRam: 2, maxRam: 6, javaPath: '', javaArgs: '', language: 'en', theme: 'loader', gameDir: profile.gameDir, curseForgeApiKeyConfigured: false };
   let mods: InstalledMod[] = [
     { fileName: 'sodium-fabric-0.6.5.jar', name: 'Sodium', version: '0.6.5', enabled: true, source: 'modrinth', projectId: 'AANobbMI' },
     { fileName: 'lithium-fabric-0.15.3.jar', name: 'Lithium', version: '0.15.3', enabled: true, source: 'modrinth', projectId: 'gvQqBUqZ' },

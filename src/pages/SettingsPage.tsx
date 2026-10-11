@@ -1,7 +1,8 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import { ArrowUpRight, Check, Cpu, FolderOpen, HardDrive, Languages, Plus, RotateCcw, Save, Shield, TerminalSquare, Trash2 } from 'lucide-react';
-import type { AppSettings, LauncherProfile } from '../../shared/types';
+import { ArrowUpRight, Check, Cpu, FolderOpen, HardDrive, Languages, Palette, Plus, RotateCcw, Save, Shield, TerminalSquare, Trash2 } from 'lucide-react';
+import type { AppSettings, LauncherProfile, ThemeId } from '../../shared/types';
 import { api } from '../lib/api';
+import { ThemeGallery } from '../components/ThemePicker';
 import { t } from '../i18n';
 
 interface SettingsPageProps {
@@ -11,9 +12,10 @@ interface SettingsPageProps {
   language: 'en' | 'ru';
   onRefresh: () => Promise<void>;
   onNotify: (message: string, kind?: 'success' | 'error') => void;
+  onThemeChange: (theme: ThemeId) => void;
 }
 
-export function SettingsPage({ profile, profiles, settings, language, onRefresh, onNotify }: SettingsPageProps) {
+export function SettingsPage({ profile, profiles, settings, language, onRefresh, onNotify, onThemeChange }: SettingsPageProps) {
   const [draft, setDraft] = useState(settings);
   const [profileName, setProfileName] = useState(profile.name);
   const [newProfileName, setNewProfileName] = useState('');
@@ -103,6 +105,10 @@ export function SettingsPage({ profile, profiles, settings, language, onRefresh,
         </div>
 
         <aside className="settings-side-column">
+          <section className="settings-section panel theme-section">
+            <div className="settings-section-heading"><div className="settings-section-icon theme-icon"><Palette size={17} /></div><div><h2>{language === 'ru' ? 'Оформление' : 'Appearance'}</h2><p>{language === 'ru' ? 'Применяется сразу, сохраняется автоматически' : 'Applies instantly and saves itself'}</p></div></div>
+            <ThemeGallery theme={settings.theme} language={language} onSelect={onThemeChange} />
+          </section>
           <section className="settings-section panel language-section">
             <div className="settings-section-heading"><div className="settings-section-icon language-icon"><Languages size={17} /></div><div><h2>{t(language, 'language')}</h2><p>Interface language</p></div></div>
             <div className="language-options"><button className={draft.language === 'en' ? 'selected' : ''} onClick={() => set('language', 'en')}><span className="language-flag">EN</span><span>English</span>{draft.language === 'en' && <Check size={15} />}</button><button className={draft.language === 'ru' ? 'selected' : ''} onClick={() => set('language', 'ru')}><span className="language-flag russian">RU</span><span>Русский</span>{draft.language === 'ru' && <Check size={15} />}</button></div>

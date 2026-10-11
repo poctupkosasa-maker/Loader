@@ -2,7 +2,8 @@ import Database from 'better-sqlite3';
 import { randomUUID } from 'node:crypto';
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
-import type { Account, AppSettings, InstalledMod, LauncherProfile, LoaderKind } from '../../shared/types';
+import { THEME_IDS } from '../../shared/types';
+import type { Account, AppSettings, InstalledMod, LauncherProfile, LoaderKind, ThemeId } from '../../shared/types';
 
 type ProfileRow = {
   id: string;
@@ -105,6 +106,7 @@ export class DatabaseService {
       javaPath: String(values.javaPath ?? ''),
       javaArgs: String(values.javaArgs ?? ''),
       language: values.language === 'ru' ? 'ru' : 'en',
+      theme: THEME_IDS.includes(values.theme as ThemeId) ? (values.theme as ThemeId) : 'loader',
       gameDir: active?.gameDir ?? '',
       curseForgeApiKeyConfigured: Boolean(process.env.CURSEFORGE_API_KEY),
     };
@@ -118,6 +120,7 @@ export class DatabaseService {
       update.run('javaPath', JSON.stringify(settings.javaPath));
       update.run('javaArgs', JSON.stringify(settings.javaArgs));
       update.run('language', JSON.stringify(settings.language));
+      update.run('theme', JSON.stringify(settings.theme));
       if (settings.gameDir.trim()) {
         const profile = this.getActiveProfile();
         this.db.prepare('UPDATE profiles SET game_dir = ? WHERE id = ?').run(settings.gameDir, profile.id);

@@ -10,7 +10,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
   pull-requests: write
 
 concurrency:
@@ -142,6 +142,31 @@ jobs:
             for (const line of lines.slice(-20)) console.log(`::warning title=${process.env.FILE}::${escape(line)}`);
           '
 
+      - name: Capture every theme
+        if: always()
+        continue-on-error: true
+        run: |
+          set -uo pipefail
+          SMOKE_PAGE="file://$PWD/dist/index.html" \
+          SMOKE_THEMES="loader,nether,end,ocean,bastion,cherry,sculk,redstone,daylight" \
+            xvfb-run -a --server-args="-screen 0 1360x860x24" \
+            npx electron --no-sandbox --disable-gpu --disable-dev-shm-usage scripts/ui-smoke/theme-shots.cjs 2>&1 | tee theme-shots.log | tail -5
+
+      - name: Publish theme previews
+        if: always() && github.event.pull_request.head.ref == 'arena/ab0c9a0a-loader'
+        continue-on-error: true
+        run: |
+          set -uo pipefail
+          ls smoke-screenshots/theme-*.png >/dev/null 2>&1 || { echo "no theme screenshots"; exit 0; }
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git config user.name "theme previews"
+          git checkout --orphan theme-previews
+          git rm -rf --cached . >/dev/null
+          cp smoke-screenshots/theme-*.png .
+          git add theme-*.png
+          git commit -q -m "Theme previews for ${GITHUB_SHA}" || echo "nothing to commit"
+          git push -f origin theme-previews
+
       - name: Publish smoke report
         if: always() && github.event_name == 'pull_request'
         env:
@@ -157,6 +182,7 @@ jobs:
           path: |
             smoke-screenshots/*.png
             smoke-report.json
+            theme-shots.log
             probe-app.log
           if-no-files-found: warn
           retention-days: 7
