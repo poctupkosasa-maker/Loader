@@ -132,6 +132,11 @@ async function main() {
 }
 
 main().catch((error) => {
-  console.log('SMOKE_RESULT ' + JSON.stringify({ fatal: String(error && error.stack) }));
+  const fatal = String(error && error.stack);
+  try {
+    fs.mkdirSync(OUT_DIR, { recursive: true });
+    fs.writeFileSync(path.join(OUT_DIR, 'app-probe-fatal.json'), JSON.stringify({ fatal }, null, 2));
+  } catch { /* the workflow still surfaces the stdout report */ }
+  console.log('SMOKE_RESULT ' + JSON.stringify({ fatal }));
   process.exit(1);
 });

@@ -20,6 +20,8 @@ jobs:
   smoke:
     name: Renderer smoke test
     runs-on: ubuntu-latest
+    env:
+      SMOKE_OUT: ${{ github.workspace }}/smoke-screenshots
     steps:
       - name: Check out source
         uses: actions/checkout@v4
@@ -49,32 +51,47 @@ jobs:
         continue-on-error: true
         run: |
           set -euo pipefail
-          export SMOKE_OUT="$PWD/smoke-screenshots"
           export SMOKE_SCENARIOS="$(printf '[{"name":"old-absolute-file","url":"file://%s/dist-abs/index.html"},{"name":"fixed-relative-file","url":"file://%s/dist/index.html"}]' "$PWD" "$PWD")"
-          xvfb-run -a --server-args="-screen 0 1440x920x24" npx electron --no-sandbox --disable-gpu scripts/ui-smoke/renderer-probe.cjs
+          xvfb-run -a --server-args="-screen 0 1440x920x24" \
+            npx electron --no-sandbox --disable-gpu scripts/ui-smoke/renderer-probe.cjs 2>&1 | tee probe-renderer.log
 
       - name: Package the application
         shell: bash
         run: |
-          set -o pipefail
+          set -euo pipefail
           npx electron-builder --linux --dir --x64 --publish never 2>&1 | tail -20
+          echo "--- packaged output ---"
+          ls -la release/linux-unpacked | head -20
 
       - name: Probe the packaged application
         continue-on-error: true
         run: |
-          set -euo pipefail
-          export SMOKE_OUT="$PWD/smoke-screenshots"
-          APP_BIN=$(find release/linux-unpacked -maxdepth 1 -type f -executable | head -n 1)
+          set -uo pipefail
+          APP_BIN=$(find release/linux-unpacked -maxdepth 1 -type f -executable -name 'loader' | head -n 1)
+          if [ -z "$APP_BIN" ]; then
+            APP_BIN=$(find release/linux-unpacked -maxdepth 1 -type f -executable \
+              ! -name 'chrome-sandbox' ! -name 'chrome_crashpad_handler' | head -n 1)
+          fi
+          if [ -z "$APP_BIN" ]; then
+            echo "No packaged application binary found" | tee probe-app.log
+            exit 1
+          fi
           echo "Launching $APP_BIN"
-          xvfb-run -a --server-args="-screen 0 1440x920x24" "$APP_BIN" --no-sandbox --disable-gpu --remote-debugging-port=9222 &
-          node scripts/ui-smoke/app-probe.cjs
+          xvfb-run -a --server-args="-screen 0 1440x920x24" "$APP_BIN" \
+            --no-sandbox --disable-gpu --remote-debugging-port=9222 > probe-app.log 2>&1 &
+          APP_PID=$!
+          sleep 3
+          node scripts/ui-smoke/app-probe.cjs 2>&1 | tee -a probe-app.log
+          STATUS=${PIPESTATUS[0]}
+          kill "$APP_PID" 2>/dev/null || true
+          exit "$STATUS"
 
       - name: Report renderer results
         if: always()
         run: |
-          set -euo pipefail
-          export SMOKE_OUT="$PWD/smoke-screenshots"
-          node scripts/ui-smoke/report.cjs | tail -n 1 > probe-output.json
+          set -uo pipefail
+          node scripts/ui-smoke/report.cjs | tee probe-report.log
+          tail -n 1 probe-report.log > probe-output.json
           {
             echo '### Renderer smoke test'
             echo
@@ -82,6 +99,20 @@ jobs:
             cat probe-output.json
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Surface probe logs
+        if: always()
+        run: |
+          set -uo pipefail
+          for file in probe-renderer.log probe-app.log; do
+            [ -f "$file" ] || continue
+            FILE="$file" node -e '
+              const fs = require("node:fs");
+              const escape = (value) => String(value).replace(/%/g, "%25").replace(/\r/g, "%0D").replace(/\n/g, "%0A").slice(0, 900);
+              const lines = fs.readFileSync(process.env.FILE, "utf8").split("\n").filter((line) => line.trim()).slice(-4);
+              for (const line of lines) console.log(`::warning title=${process.env.FILE}::${escape(line)}`);
+            '
+          done
 
       - name: Upload smoke screenshots
         if: always()

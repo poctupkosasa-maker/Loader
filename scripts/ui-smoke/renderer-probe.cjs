@@ -90,6 +90,11 @@ app.whenReady().then(async () => {
   console.log('SMOKE_RESULT ' + JSON.stringify({ scenarios: results }));
   app.exit(0);
 }).catch((error) => {
-  console.log('SMOKE_RESULT ' + JSON.stringify({ fatal: String(error && error.stack) }));
+  const fatal = String(error && error.stack);
+  try {
+    fs.mkdirSync(OUT_DIR, { recursive: true });
+    fs.writeFileSync(path.join(OUT_DIR, 'renderer-probe-fatal.json'), JSON.stringify({ fatal }, null, 2));
+  } catch { /* the workflow still surfaces the stdout report */ }
+  console.log('SMOKE_RESULT ' + JSON.stringify({ fatal }));
   app.exit(1);
 });
