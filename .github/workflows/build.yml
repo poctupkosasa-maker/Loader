@@ -54,7 +54,18 @@ jobs:
         run: npm run typecheck
 
       - name: Build installers
-        run: npm run dist:${{ matrix.target }}
+        shell: bash
+        run: |
+          set +e
+          npm run dist:${{ matrix.target }} 2>&1 | tee build-output.log
+          status=${PIPESTATUS[0]}
+          {
+            echo "### ${{ matrix.label }} installer build log"
+            echo '```text'
+            tail -n 100 build-output.log
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit "$status"
 
       - name: Upload installer artifacts
         uses: actions/upload-artifact@v4
