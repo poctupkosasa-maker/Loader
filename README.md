@@ -54,6 +54,8 @@ npm run dist:linux
 
 `electron-builder` is configured for Windows NSIS/portable, macOS DMG/ZIP, and Linux AppImage/DEB. Build each target on a supported native runner (macOS signing/notarization is a separate release step). The SQLite native addon is rebuilt for Electron during `postinstall` and unpacked from ASAR at packaging time.
 
+A GitHub Actions workflow (`.github/workflows/build.yml`) builds all three platform targets on pushes to `main` or `arena/**`, and on pull requests to `main`. Installer files are published as downloadable workflow artifacts for 14 days.
+
 ## Project map
 
 ```text
