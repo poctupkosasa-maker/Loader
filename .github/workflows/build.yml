@@ -1,0 +1,85 @@
+name: Build desktop installers
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: launcher-build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build ${{ matrix.label }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            target: win
+            label: Windows
+            artifact: loader-windows
+          - os: macos-latest
+            target: mac
+            label: macOS
+            artifact: loader-macos
+          - os: ubuntu-latest
+            target: linux
+            label: Linux
+            artifact: loader-linux
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type-check
+        run: npm run typecheck
+
+      - name: Build installers
+        shell: bash
+        run: |
+          set +e
+          npm run dist:${{ matrix.target }} 2>&1 | tee build-output.log
+          status=${PIPESTATUS[0]}
+          {
+            echo "### ${{ matrix.label }} installer build log"
+            echo '```text'
+            tail -n 100 build-output.log
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [[ "$status" -ne 0 ]]; then
+            diagnostics=$(grep -iE 'error|failed|failure|unable|could not|not found|required|exception' build-output.log | tail -n 12)
+            if [[ -z "$diagnostics" ]]; then diagnostics=$(tail -n 15 build-output.log); fi
+            printf '%s\n' "$diagnostics" | while IFS= read -r line; do
+              line=${line//'%'/'%25'}
+              line=${line//$'\r'/'%0D'}
+              line=${line//$'\n'/'%0A'}
+              echo "::error title=${{ matrix.label }} installer output::$line"
+            done
+          fi
+          exit "$status"
+
+      - name: Upload installer artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: release/*
+          if-no-files-found: error
+          retention-days: 14

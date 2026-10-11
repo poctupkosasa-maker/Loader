@@ -1,0 +1,61 @@
+import type { LanguageCode } from '../shared/types';
+
+const messages = {
+  en: {
+    home: 'Home', versions: 'Versions', mods: 'Mods', settings: 'Settings', console: 'Console',
+    play: 'Play game', launching: 'Launching…', stop: 'Stop game', install: 'Install', installed: 'Installed',
+    signIn: 'Sign in', signOut: 'Sign out', offline: 'Offline account', microsoft: 'Microsoft account',
+    online: 'Online', offlineLabel: 'Offline', latestRelease: 'Latest release',
+    searchVersions: 'Search versions…', searchMods: 'Search mods, creators…',
+    all: 'All', release: 'Releases', snapshot: 'Snapshots', oldBeta: 'Old beta', oldAlpha: 'Old alpha',
+    browse: 'Discover mods', myMods: 'My mods', enabled: 'Enabled', disabled: 'Disabled',
+    memory: 'Memory allocation', minRam: 'Minimum RAM', maxRam: 'Maximum RAM', javaRuntime: 'Java runtime',
+    autoDetect: 'Auto-detect Java', chooseJava: 'Choose Java', gameDirectory: 'Game directory', chooseFolder: 'Choose folder',
+    jvmArguments: 'Additional JVM arguments', language: 'Language', saveSettings: 'Save settings', saved: 'Settings saved',
+    profiles: 'Profiles', newProfile: 'New profile name', createProfile: 'Create profile', deleteProfile: 'Delete profile',
+    loader: 'Mod loader', vanilla: 'Vanilla', gameVersion: 'Minecraft version',
+    downloads: 'Downloads', noDownloads: 'No downloads in progress',
+    consoleSubtitle: 'Live game output and launcher activity', clear: 'Clear',
+    account: 'Account', notSignedIn: 'Not signed in', microsoftSetup: 'Microsoft sign-in needs a registered client ID.',
+    connect: 'Connect account', cancel: 'Cancel', username: 'Username', continueOffline: 'Continue offline',
+    enterCode: 'Enter this code on Microsoft’s device sign-in page.', openMicrosoft: 'Open Microsoft sign-in',
+    profile: 'Profile', ready: 'Ready to play', configure: 'Configure your setup',
+    session: 'Your worlds. Your rules.', sessionSubtitle: 'Everything you need to get into the game, exactly the way you like it.',
+    quickLaunch: 'Quick launch', selectVersion: 'Select a version', recentVersions: 'Installed versions',
+    personalize: 'Your player', browseVanilla: 'Official Minecraft versions',
+    supported: 'Release · Snapshot · Beta · Alpha', noMods: 'No mods installed yet',
+    modrinth: 'Modrinth', curseforge: 'CurseForge', download: 'Download',
+    gameStopped: 'Game closed', onlyDesktop: 'Full launcher features are available in the Electron desktop app.',
+  },
+  ru: {
+    home: 'Главная', versions: 'Версии', mods: 'Моды', settings: 'Настройки', console: 'Консоль',
+    play: 'Играть', launching: 'Запуск…', stop: 'Остановить игру', install: 'Установить', installed: 'Установлено',
+    signIn: 'Войти', signOut: 'Выйти', offline: 'Офлайн-аккаунт', microsoft: 'Аккаунт Microsoft',
+    online: 'В сети', offlineLabel: 'Офлайн', latestRelease: 'Последний релиз',
+    searchVersions: 'Поиск версий…', searchMods: 'Поиск модов и авторов…',
+    all: 'Все', release: 'Релизы', snapshot: 'Снапшоты', oldBeta: 'Старые бета', oldAlpha: 'Старые альфа',
+    browse: 'Каталог модов', myMods: 'Мои моды', enabled: 'Включён', disabled: 'Отключён',
+    memory: 'Выделение памяти', minRam: 'Минимум ОЗУ', maxRam: 'Максимум ОЗУ', javaRuntime: 'Среда Java',
+    autoDetect: 'Автоматический поиск Java', chooseJava: 'Выбрать Java', gameDirectory: 'Папка игры', chooseFolder: 'Выбрать папку',
+    jvmArguments: 'Дополнительные аргументы JVM', language: 'Язык', saveSettings: 'Сохранить настройки', saved: 'Настройки сохранены',
+    profiles: 'Профили', newProfile: 'Название нового профиля', createProfile: 'Создать профиль', deleteProfile: 'Удалить профиль',
+    loader: 'Загрузчик модов', vanilla: 'Vanilla', gameVersion: 'Версия Minecraft',
+    downloads: 'Загрузки', noDownloads: 'Нет активных загрузок',
+    consoleSubtitle: 'Вывод игры и события лаунчера', clear: 'Очистить',
+    account: 'Аккаунт', notSignedIn: 'Не выполнен вход', microsoftSetup: 'Для входа Microsoft нужен зарегистрированный ID клиента.',
+    connect: 'Подключить аккаунт', cancel: 'Отмена', username: 'Имя пользователя', continueOffline: 'Продолжить офлайн',
+    enterCode: 'Введите этот код на странице входа Microsoft.', openMicrosoft: 'Открыть вход Microsoft',
+    profile: 'Профиль', ready: 'Готово к игре', configure: 'Настройте игру',
+    session: 'Твои миры. Твои правила.', sessionSubtitle: 'Всё для игры именно так, как тебе нравится.',
+    quickLaunch: 'Быстрый запуск', selectVersion: 'Выбрать версию', recentVersions: 'Установленные версии',
+    personalize: 'Ваш персонаж', browseVanilla: 'Официальные версии Minecraft',
+    supported: 'Релизы · снапшоты · бета · альфа', noMods: 'Моды ещё не установлены',
+    modrinth: 'Modrinth', curseforge: 'CurseForge', download: 'Загрузить',
+    gameStopped: 'Игра закрыта', onlyDesktop: 'Все функции доступны в настольном приложении Electron.',
+  },
+} satisfies Record<LanguageCode, Record<string, string>>;
+
+export type MessageKey = keyof typeof messages.en;
+export function t(language: LanguageCode, key: MessageKey): string {
+  return messages[language][key] ?? messages.en[key] ?? key;
+}
