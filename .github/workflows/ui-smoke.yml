@@ -80,10 +80,25 @@ jobs:
           xvfb-run -a --server-args="-screen 0 1440x920x24" "$APP_BIN" \
             --no-sandbox --disable-gpu --remote-debugging-port=9222 > probe-app.log 2>&1 &
           APP_PID=$!
-          sleep 3
+          sleep 4
+          if kill -0 "$APP_PID" 2>/dev/null; then
+            echo "The application is still running four seconds after launch."
+          else
+            echo "The application exited within four seconds of launch."
+          fi
+          ss -ltnp 2>/dev/null | grep -E '9222|LISTEN' | head -5 || true
+          APP_LOG="$HOME/.config/Loader/logs/main.log"
+          if [ -f "$APP_LOG" ]; then
+            echo "--- electron-log: $APP_LOG ---"
+            tail -n 40 "$APP_LOG"
+          else
+            echo "--- no electron-log file at $APP_LOG ---"
+          fi
           node scripts/ui-smoke/app-probe.cjs 2>&1 | tee -a probe-app.log
           STATUS=${PIPESTATUS[0]}
           kill "$APP_PID" 2>/dev/null || true
+          wait "$APP_PID" 2>/dev/null
+          echo "Application exit status: $?"
           exit "$STATUS"
 
       - name: Report renderer results
@@ -109,7 +124,7 @@ jobs:
             FILE="$file" node -e '
               const fs = require("node:fs");
               const escape = (value) => String(value).replace(/%/g, "%25").replace(/\r/g, "%0D").replace(/\n/g, "%0A").slice(0, 900);
-              const lines = fs.readFileSync(process.env.FILE, "utf8").split("\n").filter((line) => line.trim()).slice(-4);
+              const lines = fs.readFileSync(process.env.FILE, "utf8").split("\n").filter((line) => line.trim()).slice(-12);
               for (const line of lines) console.log(`::warning title=${process.env.FILE}::${escape(line)}`);
             '
           done
@@ -122,5 +137,7 @@ jobs:
           path: |
             smoke-screenshots/*.png
             smoke-report.json
+            probe-app.log
+            probe-renderer.log
           if-no-files-found: warn
           retention-days: 7
