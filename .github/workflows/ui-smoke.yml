@@ -54,7 +54,7 @@ jobs:
           set -euo pipefail
           export SMOKE_SCENARIOS="$(printf '[{"name":"old-absolute-file","url":"file://%s/dist-abs/index.html"},{"name":"fixed-relative-file","url":"file://%s/dist/index.html"}]' "$PWD" "$PWD")"
           xvfb-run -a --server-args="-screen 0 1440x920x24" \
-            npx electron --no-sandbox --disable-gpu scripts/ui-smoke/renderer-probe.cjs 2>&1 | tee probe-renderer.log
+            npx electron --no-sandbox --disable-gpu --disable-dev-shm-usage scripts/ui-smoke/renderer-probe.cjs 2>&1 | tee probe-renderer.log
 
       - name: Package the application
         shell: bash
@@ -67,6 +67,7 @@ jobs:
       - name: Probe the packaged application
         continue-on-error: true
         run: |
+          set +e
           set -uo pipefail
           LOG=probe-app.log
           : > "$LOG"
@@ -105,7 +106,7 @@ jobs:
           export UNPACKED
 
           echo "--- preflight: packaged binary reports its version ---"
-          timeout 60 "$APP_BIN" --version
+          timeout 60 "$APP_BIN" --no-sandbox --version
           echo "preflight exit: $?"
 
           echo "--- preflight: native module loads in the packaged runtime ---"
@@ -114,7 +115,7 @@ jobs:
 
           echo "--- scenario 1: packaged binary ---"
           xvfb-run -a --server-args="-screen 0 1440x920x24" "$APP_BIN" \
-            --no-sandbox --disable-gpu --remote-debugging-port=9222 &
+            --no-sandbox --disable-gpu --disable-dev-shm-usage --remote-debugging-port=9222 &
           APP_PID=$!
           sleep 8
           if kill -0 "$APP_PID" 2>/dev/null; then echo "app alive eight seconds after launch"; else echo "app exited within eight seconds"; fi
@@ -129,7 +130,7 @@ jobs:
 
           echo "--- scenario 2: same archive served by the workspace electron ---"
           xvfb-run -a --server-args="-screen 0 1440x920x24" \
-            npx electron --no-sandbox --disable-gpu --remote-debugging-port=9223 \
+            npx electron --no-sandbox --disable-gpu --disable-dev-shm-usage --remote-debugging-port=9223 \
             release/linux-unpacked/resources/app.asar &
           ASAR_PID=$!
           sleep 8
