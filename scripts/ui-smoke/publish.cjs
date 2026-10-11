@@ -39,6 +39,26 @@ async function request(method, url, body) {
   return response.status === 204 ? null : response.json().catch(() => null);
 }
 
+function themeSummary() {
+  let shots = [];
+  try {
+    shots = fs.readdirSync('smoke-screenshots').filter((file) => file.startsWith('theme-') && file.endsWith('.png'));
+  } catch {
+    return '';
+  }
+  let state = '';
+  try {
+    const raw = JSON.parse(fs.readFileSync(path.join('smoke-screenshots', 'theme-shots.json'), 'utf8'));
+    const applied = raw.results.map((item) => `${item.theme}/${item.page}:${item.rootChildren > 0 ? 'ok' : 'blank'}`);
+    state = `\n\napplied theme dataset: ${raw.results.length ? applied.join(', ') : 'none'}`;
+    const sample = raw.results[0];
+    if (sample) state += `\n\nfirst capture: \`${JSON.stringify({ theme: sample.theme, body: sample.body, panel: sample.panel, accent: sample.accent })}\``;
+  } catch {
+    state = '\n\nno theme-shots.json';
+  }
+  return `\n### Theme previews\n\n${shots.length} screenshot(s) on the \`theme-previews\` branch.${state}\n`;
+}
+
 async function main() {
   const report = JSON.parse(fs.readFileSync('smoke-report.json', 'utf8'));
   const rows = report.scenarios.map((scenario) => {
@@ -58,6 +78,9 @@ async function main() {
     '| --- | --- | --- | --- |',
     ...(rows.length ? rows : ['| — | no scenarios recorded | — | — |']),
     report.fatal?.length ? `\n**Probe failures**\n\n\`\`\`text\n${report.fatal.join('\n').slice(0, 1500)}\n\`\`\`\n` : '',
+    themeSummary(),
+    readWhenPresent('theme-shots.log', 60),
+    readWhenPresent('theme-publish.log', 30),
     readWhenPresent('probe-app.log', 120),
     readWhenPresent('probe-renderer.log', 40),
   ].join('\n');

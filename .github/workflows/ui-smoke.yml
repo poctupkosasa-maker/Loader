@@ -150,22 +150,26 @@ jobs:
           SMOKE_PAGE="file://$PWD/dist/index.html" \
           SMOKE_THEMES="loader,nether,end,ocean,bastion,cherry,sculk,redstone,daylight" \
             xvfb-run -a --server-args="-screen 0 1360x860x24" \
-            npx electron --no-sandbox --disable-gpu --disable-dev-shm-usage scripts/ui-smoke/theme-shots.cjs 2>&1 | tee theme-shots.log | tail -5
+            npx electron --no-sandbox --disable-gpu --disable-dev-shm-usage scripts/ui-smoke/theme-shots.cjs 2>&1 | tee theme-shots.log | tail -6
 
       - name: Publish theme previews
         if: always() && github.event.pull_request.head.ref == 'arena/ab0c9a0a-loader'
         continue-on-error: true
         run: |
           set -uo pipefail
-          ls smoke-screenshots/theme-*.png >/dev/null 2>&1 || { echo "no theme screenshots"; exit 0; }
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git config user.name "theme previews"
-          git checkout --orphan theme-previews
-          git rm -rf --cached . >/dev/null
-          cp smoke-screenshots/theme-*.png .
-          git add theme-*.png
-          git commit -q -m "Theme previews for ${GITHUB_SHA}" || echo "nothing to commit"
-          git push -f origin theme-previews
+          {
+            set -x
+            ls smoke-screenshots/theme-*.png || true
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git config user.name "theme previews"
+            git checkout --orphan theme-previews
+            git rm -rf --cached . >/dev/null
+            cp smoke-screenshots/theme-*.png .
+            git add theme-*.png
+            git commit -q -m "Theme previews for ${GITHUB_SHA}"
+            git push -f origin theme-previews
+            echo "theme previews pushed for ${GITHUB_SHA}"
+          } 2>&1 | tee theme-publish.log
 
       - name: Publish smoke report
         if: always() && github.event_name == 'pull_request'
@@ -183,6 +187,7 @@ jobs:
             smoke-screenshots/*.png
             smoke-report.json
             theme-shots.log
+            theme-publish.log
             probe-app.log
           if-no-files-found: warn
           retention-days: 7

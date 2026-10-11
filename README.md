@@ -11,7 +11,8 @@ A cross-platform desktop launcher built with Electron, React, TypeScript, Node.j
 - Java detection and selection, Mojang argument/rule resolution, profile-specific game directories, process output, and stop controls.
 - SQLite-backed profiles, preferences, accounts (non-secret metadata), and mod state.
 - Modrinth search/install with required dependency handling, local enable/disable, and optional CurseForge API integration.
-- Dark React UI, a skinview3d player preview for Microsoft skins, live console/download views, and English/Russian labels.
+- React UI with nine switchable appearances, a skinview3d player preview for Microsoft skins, live console/download views, and English/Russian labels.
+- Themes are generated from one catalogue (`npm run themes:build`) and gated by `npm run themes:check`, which verifies every design token exists in every theme and audits text contrast.
 
 ## Requirements
 
@@ -82,10 +83,15 @@ electron/
     ProfileService.ts    profile validation and lifecycle
 src/
   App.tsx                 React shell, app state, toast/events
-  components/             navigation, auth modal, 3D skin preview
+  components/             navigation, auth modal, 3D skin preview, theme picker
   pages/                  home, versions, mods, settings, console
   lib/api.ts              Electron bridge / browser-preview adapter
   i18n.ts                 English and Russian UI strings
+  themes.css              generated palettes, one block per theme
+  themeCatalogue.ts       generated theme names, blurbs and swatches
+scripts/themes/
+  generate-themes.mjs     palette generator (themes.css + themeCatalogue.ts)
+  audit-contrast.mjs      readability guard for every generated theme
 shared/types.ts           Shared IPC/data contract
 ```
 

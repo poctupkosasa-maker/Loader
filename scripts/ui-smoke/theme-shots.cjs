@@ -28,6 +28,8 @@ const PROBE = `(() => {
 })()`;
 
 async function main() {
+  if (!PAGE) throw new Error('SMOKE_PAGE is required');
+  await app.whenReady();
   fs.mkdirSync(OUT_DIR, { recursive: true });
   const window = new BrowserWindow({
     width: 1360,
@@ -56,19 +58,27 @@ async function main() {
 
   // The settings page shows the theme gallery itself.
   const openedSettings = await window.webContents.executeJavaScript(`(() => {
-    const target = [...document.querySelectorAll('.nav-item')].find((item) => /settings|настройки/i.test(item.textContent || ''));
+    const nav = [...document.querySelectorAll('.nav-item')];
+    const target = nav.find((item) => /^(settings|настройки)$/i.test((item.textContent || '').trim()))
+      || nav[3] || nav[nav.length - 1];
     if (!target) return false;
     target.click();
     return true;
   })()`, true);
   await sleep(1200);
   if (openedSettings) {
+    await window.webContents.executeJavaScript(`document.querySelector('.theme-card')?.scrollIntoView({ block: 'center' }); true`, true);
     for (const theme of THEMES) {
       await window.webContents.executeJavaScript(`document.documentElement.dataset.theme = ${JSON.stringify(theme)}; true`, true);
-      await sleep(500);
+      await sleep(450);
       await capture(theme, 'settings');
     }
   }
+
+  // The topbar picker is part of the feature, so capture it open too.
+  await window.webContents.executeJavaScript(`document.documentElement.dataset.theme = 'loader'; document.querySelector('.theme-trigger')?.click(); true`, true);
+  await sleep(600);
+  await capture('loader', 'picker');
 
   fs.writeFileSync(path.join(OUT_DIR, 'theme-shots.json'), JSON.stringify({ results, openedSettings }, null, 2));
   console.log('THEME_SHOTS ' + JSON.stringify({ openedSettings, themes: results.length, applied: results.every((item) => item.rootChildren > 0) }));
@@ -76,7 +86,7 @@ async function main() {
   app.exit(0);
 }
 
-main().catch((error) => {
+app.whenReady().then(main).catch((error) => {
   console.log('THEME_SHOTS ' + JSON.stringify({ fatal: String(error && error.stack) }));
   app.exit(1);
 });
