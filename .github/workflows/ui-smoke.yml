@@ -73,13 +73,22 @@ jobs:
           exec >> "$LOG" 2>&1
           set -x
 
-          APP_BIN=$(find release/linux-unpacked -maxdepth 1 -type f -executable -name 'loader' | head -n 1)
+          echo "--- packaged output ---"
+          ls -la release/linux-unpacked | head -30
+
+          APP_BIN=$(find release/linux-unpacked -maxdepth 1 -type f -executable -iname 'loader*' | head -n 1)
           if [ -z "$APP_BIN" ]; then
             APP_BIN=$(find release/linux-unpacked -maxdepth 1 -type f -executable \
-              ! -name 'chrome-sandbox' ! -name 'chrome_crashpad_handler' | head -n 1)
+              ! -name '*.*' ! -name 'chrome-sandbox' ! -name 'chrome_crashpad_handler' | head -n 1)
           fi
+          case "$APP_BIN" in
+            *.so*|*chrome-sandbox*|*chrome_crashpad_handler*|"")
+              echo "Refusing to run '${APP_BIN:-<empty>}' as the application binary"
+              exit 1
+              ;;
+          esac
           echo "Packaged binary: $APP_BIN"
-          test -n "$APP_BIN" || exit 1
+          test -x "$APP_BIN" || exit 1
 
           echo "--- archive contents ---"
           node -e '
